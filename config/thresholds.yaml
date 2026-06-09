@@ -1,0 +1,23 @@
+confirmed_ai: 0.85
+likely_ai: 0.65
+suspicious: 0.45
+likely_human: 0.25
+
+model_weights:
+  phase_1:
+    community_forensics: 0.45
+    universal_fake_detect: 0.25
+    npr: 0.15
+    sdxl_detector: 0.15
+
+  phase_2:
+    community_forensics: 0.35
+    ra_det: 0.25
+    spai_hedge: 0.20
+    sdxl_detector: 0.15
+    npr_universal: 0.05
+
+short_circuit:
+  metadata_confirmed_skip_models: true
+  small_icon_threshold_px: 64
+  small_icon_use_lightweight_only: true

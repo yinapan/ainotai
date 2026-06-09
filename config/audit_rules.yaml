@@ -1,0 +1,51 @@
+network_patterns:
+  - "requests\\."
+  - "httpx\\."
+  - "aiohttp"
+  - "urllib"
+  - "socket"
+  - "websocket"
+  - "grpc"
+  - "boto3"
+  - "openai"
+  - "huggingface_hub"
+  - "snapshot_download"
+  - "curl"
+  - "wget"
+  - "Invoke-WebRequest"
+  - "Invoke-RestMethod"
+
+exfiltration_patterns:
+  - "upload"
+  - "multipart"
+  - "form-data"
+  - "\\.post\\("
+  - "\\.put\\("
+  - "\\bs3\\b"
+  - "\\boss\\b"
+  - "\\bcos\\b"
+  - "\\bftp\\b"
+  - "\\bsftp\\b"
+  - "\\bsmtp\\b"
+  - "sendmail"
+
+allowed_exceptions:
+  - "from_pretrained(local_path, local_files_only=True)"
+  - "audit: allow"
+
+scan_extensions:
+  - ".py"
+  - ".ps1"
+  - ".sh"
+  - ".yaml"
+  - ".yml"
+  - ".toml"
+  - ".json"
+  - ".js"
+  - ".ts"
+
+skip_directories:
+  - ".git"
+  - "__pycache__"
+  - ".venv"
+  - "node_modules"

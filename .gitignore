@@ -1,0 +1,32 @@
+# Python/cache artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local/generated audit output
+reports/
+checksums.sha256
+
+# Large offline bundles and third-party binaries
+wheels/
+tools/
+
+# Model weights and generated checkpoints
+models/**/*.bin
+models/**/*.h5
+models/**/*.msgpack
+models/**/*.onnx
+models/**/*.pt
+models/**/*.pth
+models/**/*.safetensors
+models/**/checkpoint-*/
+
+# Local agent/tooling state
+.sixth/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini

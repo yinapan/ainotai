@@ -1,0 +1,102 @@
+security:
+  offline_required: true
+  fail_if_network_reachable: true
+  allow_remote_urls: false
+  input_readonly_required: true
+  redact_logs: true
+  save_original_assets: false
+  save_thumbnails: false
+
+scan:
+  extensions:
+    image: [".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tga", ".tif", ".tiff"]
+    threed: [".fbx", ".obj", ".glb", ".gltf", ".blend"]
+    vector: [".svg", ".pdf"]
+  max_file_size_mb: 500
+  parallel_workers: 4
+  exclude_patterns:
+    - ".git"
+    - "__pycache__"
+    - ".venv"
+    - "reports"
+    - "models"
+    - "tools"
+
+metadata:
+  enabled: false
+  exiftool_path: "./tools/exiftool/exiftool"
+  c2patool_path: "./tools/c2patool/c2patool"
+  aicheck_path: "./tools/aicheck/aicheck"
+  signatures_file: "./config/signatures.yaml"
+
+forensics:
+  enabled: true
+  ela:
+    enabled: true
+    quality: 90
+  frequency:
+    enabled: true
+    method: "fft"
+  noise:
+    enabled: true
+  color_stats:
+    enabled: true
+
+fbx:
+  enabled: true
+  topology_anomaly_threshold: 0.5
+  max_vertices: 10000000
+
+models:
+  enabled: true
+  device: "cpu"
+  local_files_only: true
+  batch_size: 8
+
+  community_forensics:
+    enabled: true
+    weight: 0.25
+    path: "./models/community-forensics"
+
+  cnn_detection:
+    enabled: false
+    weight: 0.20
+    path: "./models/cnn-detection"
+
+  freq_detect:
+    enabled: false
+    weight: 0.15
+    path: "./models/freq-detect"
+
+  clip_detector:
+    enabled: true
+    weight: 0.20
+    path: "./models/clip-detector"
+
+  npr:
+    enabled: true
+    weight: 0.35
+    path: "./models/npr"
+
+  universal_fake_detect:
+    enabled: false
+    weight: 0.15
+    path: "./models/universal-fake-detect"
+
+  sdxl_detector:
+    enabled: true
+    weight: 0.20
+    path: "./models/sdxl-detector"
+
+report:
+  formats: ["json", "csv", "markdown", "html"]
+  output_dir: "./reports"
+  include_original_assets: false
+  include_highres_preview: false
+  include_lowres_thumbnail: false
+
+thresholds:
+  confirmed_ai: 0.85
+  likely_ai: 0.65
+  suspicious: 0.45
+  likely_human: 0.25

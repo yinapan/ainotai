@@ -1,0 +1,24 @@
+ai_software:
+  - stable diffusion
+  - automatic1111
+  - comfyui
+  - invokeai
+  - midjourney
+  - dall-e
+  - dalle
+  - adobe firefly
+  - novelai
+  - liblib
+  - 即梦
+  - 通义万相
+  - 文心一格
+
+ai_parameter_patterns:
+  - "steps:\\s*\\d+"
+  - "sampler:\\s*\\w+"
+  - "cfg[\\s_]scale:\\s*[\\d.]+"
+  - "seed:\\s*\\d+"
+  - "model[\\s_]hash:\\s*[a-f0-9]+"
+  - "negative[\\s_]prompt:"
+  - "lora:"
+  - "controlnet"
