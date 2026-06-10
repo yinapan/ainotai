@@ -56,13 +56,15 @@ def write_html_report(results: list[AssetResult], output_dir: str | Path, input_
     for result in results:
         label_counts[result.final_label] = label_counts.get(result.final_label, 0) + 1
 
-    src_dir = Path(input_dir) if input_dir else Path(".")
+    src_dir = Path(input_dir).resolve() if input_dir else Path(".").resolve()
     thumbnails: dict[str, str] = {}
     for result in results:
         if result.asset_type == "image":
-            img_path = src_dir / result.relative_path
-            if img_path.is_file():
-                thumbnails[result.relative_path] = _generate_thumbnail(img_path)
+            candidate = (src_dir / result.relative_path).resolve()
+            if not str(candidate).startswith(str(src_dir) + "\\") and not str(candidate).startswith(str(src_dir) + "/"):
+                continue
+            if candidate.is_file():
+                thumbnails[result.relative_path] = _generate_thumbnail(candidate)
 
     rows_parts = []
     for i, result in enumerate(results):
