@@ -29,6 +29,7 @@ from .scorer import (
     label_from_score,
     texture_model_weight_factor,
 )
+from .texture_grouping import apply_material_group_review
 
 logger = logging.getLogger(__name__)
 
@@ -403,6 +404,9 @@ def run_pipeline(input_path: str | Path, config: dict) -> list[AssetResult]:
             )
 
         results.append(result)
+
+    if config.get("models", {}).get("material_group_review", {}).get("enabled", True):
+        apply_material_group_review(results)
 
     logger.info("Pipeline complete: %d assets processed", len(results))
     return results

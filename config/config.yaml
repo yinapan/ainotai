@@ -96,6 +96,9 @@ models:
   texture_weighting:
     enabled: true
 
+  material_group_review:
+    enabled: true
+
 report:
   formats: ["json", "csv", "markdown", "html"]
   output_dir: "./reports"
