@@ -34,8 +34,17 @@ from .scorer import (
     texture_model_weight_overrides,
 )
 from .texture_grouping import apply_material_group_review, parse_texture_role
+from ..forensics.auxiliary_analysis import analyze_normal_map, analyze_packed_map, analyze_emissive_or_height
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class LayerVerdict:
+    layer: str
+    conclusion: str
+    detail: str
+    score: float = 0.0
 
 
 @dataclass
@@ -52,7 +61,11 @@ class AssetResult:
     final_label: str = "Inconclusive"
     confidence: float = 0.0
     review_required: bool = False
+    strong_evidence: list[str] = field(default_factory=list)
+    weak_evidence: list[str] = field(default_factory=list)
+    asset_attributes: list[str] = field(default_factory=list)
     evidence: list[str] = field(default_factory=list)
+    layer_verdicts: list[LayerVerdict] = field(default_factory=list)
 
 
 def _build_ensemble(config: dict) -> EnsembleDetector | None:
@@ -285,8 +298,15 @@ def _process_image_asset(
     thresholds: dict,
 ) -> AssetResult:
     evidence: list[str] = list(meta_signals)
+    strong_ev: list[str] = []
+    weak_ev: list[str] = []
+    attribs: list[str] = []
+
     texture_role = parse_texture_role(asset.relative_path)
     is_auxiliary = texture_role.role in ("normal", "packed", "emissive", "height")
+    attribs.append(f"Texture role: {texture_role.role}")
+    if meta_signals:
+        strong_ev.extend(meta_signals)
 
     image = cv2.imread(str(asset.path))
     if image is None:
@@ -312,7 +332,7 @@ def _process_image_asset(
 
     forensics_score, forensics_info = _run_forensics(image, config)
     if forensics_score > 0.7:
-        evidence.append("Pixel forensics abnormal")
+        weak_ev.append("Pixel forensics abnormal")
 
     model_score = 0.0
     model_info: dict = {}
@@ -328,6 +348,11 @@ def _process_image_asset(
         model_info["_weighted_score"] = raw_model_score
         model_info["_texture_weight_factor"] = model_factor
 
+        participated = [k for k, v in model_info.items() if not k.startswith("_") and v is not None]
+        unavailable = [k for k, v in model_info.items() if not k.startswith("_") and v is None]
+        model_info["_participated"] = participated
+        model_info["_unavailable"] = unavailable
+
         consensus = compute_model_consensus(model_info)
         model_info["_consensus"] = consensus.agreement
         model_info["_high_count"] = consensus.high_score_count
@@ -336,17 +361,30 @@ def _process_image_asset(
 
         if is_auxiliary:
             model_score = 0.0
-            evidence.append("Auxiliary texture: AI scoring deferred to group review")
+            attribs.append("Auxiliary texture: AI scoring deferred to group review")
         else:
             model_score = raw_model_score
             if consensus.agreement in ("unanimous_high", "majority_high"):
-                evidence.append("Model ensemble high confidence")
+                strong_ev.append("Model ensemble high confidence")
             elif consensus.agreement == "split" and model_score > 0.5:
-                evidence.append("Model scores split (needs review)")
+                weak_ev.append("Model scores split (needs review)")
+
+    if is_auxiliary:
+        aux_result = None
+        if texture_role.role == "normal":
+            aux_result = analyze_normal_map(image)
+        elif texture_role.role == "packed":
+            aux_result = analyze_packed_map(image)
+        elif texture_role.role in ("emissive", "height"):
+            aux_result = analyze_emissive_or_height(image)
+        if aux_result and aux_result.anomaly_score > 0.2:
+            weak_ev.append(f"Auxiliary analysis ({texture_role.role}): {'; '.join(aux_result.details)}")
+            forensics_info["aux_anomaly_score"] = aux_result.anomaly_score
+            forensics_info["aux_details"] = aux_result.details
 
     if forensics_info.get("tiling_suspicious", False) and model_score > 0.5 and forensics_score > 0.5:
         if texture_role.role in ("albedo", "unknown"):
-            evidence.append("Tiling pattern detected (auxiliary)")
+            attribs.append("Tiling pattern detected (auxiliary)")
 
     consensus_obj = consensus if ensemble and model_score > 0 else None
     components = ScoreComponents(
@@ -356,12 +394,20 @@ def _process_image_asset(
         metadata_confirmed=meta_score >= 1.0,
         consensus=consensus_obj,
     )
-    final_score = compute_final_score(components)
+    scoring_config = config.get("scoring", {})
+    final_score = compute_final_score(components, scoring_config)
     label = label_from_score(final_score, thresholds or None)
     review = label in {"Confirmed AI", "Likely AI", "Suspicious"}
 
-    if not evidence:
-        evidence.append("No significant AI evidence found")
+    if not strong_ev and not weak_ev:
+        attribs.append("No significant AI evidence found")
+    all_evidence = strong_ev + weak_ev
+
+    verdicts = [
+        LayerVerdict("metadata", "flagged" if meta_score > 0 else "clean", f"score={meta_score:.2f}", meta_score),
+        LayerVerdict("role", texture_role.role, f"group={texture_role.group_key}", 0.0),
+        LayerVerdict("analysis", "flagged" if model_score > 0.5 else "clean", f"model={model_score:.2f} forensics={forensics_score:.2f}", model_score),
+    ]
 
     return AssetResult(
         file_id=f"sha256:{asset.sha256}",
@@ -375,7 +421,11 @@ def _process_image_asset(
         final_label=label,
         confidence=final_score,
         review_required=review,
-        evidence=evidence,
+        strong_evidence=strong_ev,
+        weak_evidence=weak_ev,
+        asset_attributes=attribs,
+        evidence=all_evidence,
+        layer_verdicts=verdicts,
     )
 
 
@@ -421,7 +471,7 @@ def _process_mesh_asset(
         model_score=mesh_score,
         metadata_confirmed=meta_score >= 1.0,
     )
-    final_score = compute_final_score(components)
+    final_score = compute_final_score(components, config.get("scoring", {}))
     label = label_from_score(final_score, config.get("thresholds", None))
     review = label in {"Confirmed AI", "Likely AI", "Suspicious"} or bool(fbx_result.signals)
 
@@ -459,6 +509,7 @@ def run_pipeline(input_path: str | Path, config: dict) -> list[AssetResult]:
             meta_score, meta_signals, metadata_info = 0.0, [], {}
 
         if meta_score >= 1.0:
+            confirmed_ev = meta_signals + ["Metadata confirms AI generation"]
             results.append(AssetResult(
                 file_id=f"sha256:{asset.sha256}",
                 relative_path=asset.relative_path,
@@ -468,7 +519,8 @@ def run_pipeline(input_path: str | Path, config: dict) -> list[AssetResult]:
                 final_label="Confirmed AI",
                 confidence=1.0,
                 review_required=True,
-                evidence=meta_signals + ["Metadata confirms AI generation"],
+                strong_evidence=confirmed_ev,
+                evidence=confirmed_ev,
             ))
             continue
 

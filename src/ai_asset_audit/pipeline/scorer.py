@@ -122,16 +122,28 @@ class ScoreComponents:
     consensus: ModelConsensus | None = None
 
 
-def compute_final_score(components: ScoreComponents) -> float:
+def compute_final_score(components: ScoreComponents, scoring_config: dict | None = None) -> float:
     if components.metadata_confirmed:
         return 1.0
 
+    sc = scoring_config or {}
+    weights = sc.get("weights", {})
+    penalties = sc.get("penalties", {})
+    w_meta = weights.get("metadata", 0.35)
+    w_model = weights.get("model_consensus", 0.40)
+    w_forensics = weights.get("forensics", 0.15)
+    p_low_count = penalties.get("low_model_count", 0.8)
+    p_single_high = penalties.get("single_model_high", 0.7)
+
     if components.model_score > 0:
         base = (
-            components.metadata_score * 0.3
-            + components.forensics_score * 0.2
-            + components.model_score * 0.5
+            components.metadata_score * w_meta
+            + components.forensics_score * w_forensics
+            + components.model_score * w_model
         )
+        remainder = 1.0 - w_meta - w_model - w_forensics
+        if remainder > 0:
+            base += components.forensics_score * remainder
 
         if components.consensus:
             c = components.consensus
@@ -141,6 +153,10 @@ def compute_final_score(components: ScoreComponents) -> float:
                 base = min(base * 1.1, 1.0)
             elif c.agreement == "majority_low":
                 base *= 0.5
+            if c.available_count < 3:
+                base *= p_low_count
+            if c.high_score_count == 1 and c.available_count >= 2:
+                base *= p_single_high
 
         score = base
     elif components.forensics_score > 0:

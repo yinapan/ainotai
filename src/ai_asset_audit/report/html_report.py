@@ -75,6 +75,10 @@ li {{ margin: 0.3rem 0; }}
 .tag-pixel {{ background: #f8d7da; color: #721c24; }}
 .tag-model {{ background: #d4edda; color: #155724; }}
 .tag-none {{ background: #e2e3e5; color: #383d41; }}
+.tag-strong {{ background: #f8d7da; color: #721c24; }}
+.tag-weak {{ background: #fff3cd; color: #856404; }}
+.tag-attr {{ background: #e2e3e5; color: #495057; }}
+.ev-tier {{ margin-bottom: 3px; }}
 </style>
 </head>
 <body>
@@ -241,7 +245,7 @@ li {{ margin: 0.3rem 0; }}
 
 def _result_row(result: AssetResult) -> str:
     color = _LABEL_COLORS.get(result.final_label, "#000")
-    evidence_tags = _format_evidence_tags(result.evidence)
+    tiered_html = _format_tiered_evidence(result)
     evidence_raw = "; ".join(result.evidence)
     model_html = _format_models(result.models)
     tiling_score = result.forensics.get("tiling_score", 0) if result.forensics else 0
@@ -254,7 +258,7 @@ def _result_row(result: AssetResult) -> str:
 <td>{result.dimensions or '-'}</td>
 <td data-value="{tiling_score:.4f}">{tiling_score:.4f}</td>
 <td class="models">{model_html}</td>
-<td class="evidence" data-value="{escape(evidence_raw)}">{evidence_tags}</td>
+<td class="evidence" data-value="{escape(evidence_raw)}">{tiered_html}</td>
 </tr>"""
 
 
@@ -273,17 +277,46 @@ def _format_evidence_tags(evidence: list[str]) -> str:
     return " ".join(tags)
 
 
+def _format_tiered_evidence(result: AssetResult) -> str:
+    parts = []
+    if result.strong_evidence:
+        items = " ".join(f'<span class="tag tag-strong">{escape(e)}</span>' for e in result.strong_evidence)
+        parts.append(f'<div class="ev-tier"><b>强证据:</b> {items}</div>')
+    if result.weak_evidence:
+        items = " ".join(f'<span class="tag tag-weak">{escape(e)}</span>' for e in result.weak_evidence)
+        parts.append(f'<div class="ev-tier"><b>弱证据:</b> {items}</div>')
+    if result.asset_attributes:
+        items = " ".join(f'<span class="tag tag-attr">{escape(e)}</span>' for e in result.asset_attributes)
+        parts.append(f'<div class="ev-tier"><b>属性:</b> {items}</div>')
+    if not parts:
+        parts.append('<span class="tag tag-none">No evidence</span>')
+    return "".join(parts)
+
+
 def _format_models(models: dict) -> str:
     if not models:
         return "-"
 
-    rows: list[str] = []
-    for name, value in models.items():
-        if value is None:
-            display = "unavailable"
-        elif isinstance(value, float):
-            display = f"{value:.4f}"
-        else:
-            display = escape(str(value))
-        rows.append(f"{escape(name)}: {display}")
-    return "<br>".join(rows)
+    participated = models.get("_participated", [])
+    unavailable = models.get("_unavailable", [])
+    consensus = models.get("_consensus", "")
+    weighted = models.get("_weighted_score", 0)
+    divergence = models.get("_divergence", 0)
+
+    parts: list[str] = []
+    if participated:
+        parts.append("<b>参与:</b>")
+        for name in participated:
+            score = models.get(name)
+            if isinstance(score, float):
+                parts.append(f"&nbsp;&nbsp;{escape(name)}: {score:.4f}")
+            else:
+                parts.append(f"&nbsp;&nbsp;{escape(name)}")
+    if unavailable:
+        parts.append("<b>未参与:</b>")
+        for name in unavailable:
+            parts.append(f"&nbsp;&nbsp;{escape(name)}: 缺失")
+    if consensus:
+        parts.append(f"<b>综合:</b> 加权={weighted:.4f} | 共识={consensus} | 分歧={divergence:.4f}")
+
+    return "<br>".join(parts) if parts else "-"

@@ -145,6 +145,26 @@ def cmd_model_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    from src.ai_asset_audit.pipeline.calibration import run_calibration
+    config = _load_config(args.config)
+    result = run_calibration(args.benchmark, config)
+    report = {
+        "total_samples": result.total_samples,
+        "per_category": result.per_category,
+        "current_thresholds": result.current_thresholds,
+        "recommended_thresholds": result.recommended_thresholds,
+        "confusion_matrix": result.confusion,
+    }
+    output = Path(args.output)
+    output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"校准完成: {result.total_samples} 个样本")
+    print(f"报告已写入 {output.resolve()}")
+    if result.recommended_thresholds:
+        print(f"推荐阈值: {result.recommended_thresholds}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="asset-audit",
@@ -183,6 +203,12 @@ def build_parser() -> argparse.ArgumentParser:
     model_status.add_argument("--config", default="./config/config.yaml")
     model_status.add_argument("--offline", action="store_true")
     model_status.set_defaults(func=cmd_model_status)
+
+    calibrate = subparsers.add_parser("calibrate", help="标注集校准阈值")
+    calibrate.add_argument("benchmark", help="标注集目录 (子目录: human/ai_generated/ai_assisted/false_positive)")
+    calibrate.add_argument("--config", default="./config/config.yaml")
+    calibrate.add_argument("--output", default="./calibration_report.json")
+    calibrate.set_defaults(func=cmd_calibrate)
 
     return parser
 

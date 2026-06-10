@@ -114,3 +114,13 @@ thresholds:
   likely_ai: 0.65
   suspicious: 0.45
   likely_human: 0.25
+
+scoring:
+  weights:
+    metadata: 0.35
+    model_consensus: 0.40
+    forensics: 0.15
+    group_consistency: 0.10
+  penalties:
+    low_model_count: 0.8
+    single_model_high: 0.7

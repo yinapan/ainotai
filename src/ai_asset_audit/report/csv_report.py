@@ -17,6 +17,9 @@ CSV_FIELDS = [
     "final_label",
     "confidence",
     "review_required",
+    "strong_evidence",
+    "weak_evidence",
+    "asset_attributes",
     "evidence",
 ]
 
@@ -31,6 +34,9 @@ def write_csv_report(results: list[AssetResult], output_dir: str | Path) -> Path
         writer.writeheader()
         for r in results:
             row = asdict(r)
+            row["strong_evidence"] = " | ".join(r.strong_evidence)
+            row["weak_evidence"] = " | ".join(r.weak_evidence)
+            row["asset_attributes"] = " | ".join(r.asset_attributes)
             row["evidence"] = " | ".join(r.evidence)
             writer.writerow(row)
 

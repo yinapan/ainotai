@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .pipeline import AssetResult
+    from .pipeline import AssetResult, LayerVerdict
 
 
 @dataclass(frozen=True)
@@ -87,20 +87,33 @@ def apply_material_group_review(results: list[AssetResult]) -> None:
             for aux in auxiliaries:
                 if aux.final_label not in _RISK_LABELS:
                     aux.review_required = True
-                    aux.evidence.append(
+                    aux.asset_attributes.append(
                         "Albedo in same material group flagged — review recommended"
                     )
+            group_conclusion = "flagged"
+            group_detail = f"{len(albedo_risky)} albedo(s) flagged, auxiliary textures marked for review"
         elif aux_risky and not albedo_risky:
             for suspect in aux_risky:
                 suspect.final_label = "Likely Human"
                 suspect.review_required = True
                 suspect.confidence = min(suspect.confidence, 0.44)
-                suspect.evidence.append(
+                suspect.asset_attributes.append(
                     "Isolated auxiliary texture suspicion downgraded by material group review"
                 )
+            group_conclusion = "downgraded"
+            group_detail = f"{len(aux_risky)} isolated auxiliary suspicion(s) downgraded"
+        else:
+            group_conclusion = "clean"
+            group_detail = "No group-level risk signals"
 
         risky_count = len(albedo_risky) + len(aux_risky)
         _annotate_group_consensus(group_results, risky_count)
+
+        from .pipeline import LayerVerdict
+        for r in group_results:
+            r.layer_verdicts.append(LayerVerdict(
+                "group", group_conclusion, group_detail, float(risky_count),
+            ))
 
 
 def _annotate_group_consensus(results: list[AssetResult], risky_count: int) -> None:
