@@ -89,6 +89,40 @@ li {{ margin: 0.3rem 0; }}
 <h2>概览</h2>
 <ul>{summary_items}</ul>
 
+<details class="legend" style="margin-bottom:1.5rem;">
+<summary style="cursor:pointer;font-weight:600;font-size:0.95rem;color:#343a40;">图例说明 (点击展开)</summary>
+<div style="display:flex;gap:2rem;flex-wrap:wrap;margin-top:0.8rem;">
+<div>
+<h4 style="margin:0 0 0.4rem;font-size:0.85rem;color:#495057;">结论标签</h4>
+<table style="font-size:0.8rem;border-collapse:collapse;box-shadow:none;">
+<tr><td style="padding:2px 8px;color:#dc3545;font-weight:bold;">Confirmed AI</td><td style="padding:2px 8px;">确认 AI 生成 — 元数据直接命中或多模型一致高分</td></tr>
+<tr><td style="padding:2px 8px;color:#fd7e14;font-weight:bold;">Likely AI</td><td style="padding:2px 8px;">很可能 AI — 多个信号指向 AI，缺少元数据铁证</td></tr>
+<tr><td style="padding:2px 8px;color:#ffc107;font-weight:bold;">Suspicious</td><td style="padding:2px 8px;">可疑 — 部分信号异常，建议人工复核</td></tr>
+<tr><td style="padding:2px 8px;color:#28a745;font-weight:bold;">Likely Human</td><td style="padding:2px 8px;">很可能人工 — 少量弱信号，不构成威胁</td></tr>
+<tr><td style="padding:2px 8px;color:#6c757d;font-weight:bold;">Low AI evidence</td><td style="padding:2px 8px;">AI 证据极少 — 基本无 AI 痕迹</td></tr>
+<tr><td style="padding:2px 8px;color:#adb5bd;font-weight:bold;">Inconclusive</td><td style="padding:2px 8px;">无法判定 — 文件无法打开或格式不支持</td></tr>
+</table>
+</div>
+<div>
+<h4 style="margin:0 0 0.4rem;font-size:0.85rem;color:#495057;">证据分级</h4>
+<table style="font-size:0.8rem;border-collapse:collapse;box-shadow:none;">
+<tr><td style="padding:2px 8px;"><span class="tag tag-strong">强证据</span></td><td style="padding:2px 8px;">可定论的决定性证据 (AI 元数据、C2PA 标记、模型集成高置信)</td></tr>
+<tr><td style="padding:2px 8px;"><span class="tag tag-weak">弱证据</span></td><td style="padding:2px 8px;">辅助参考信号 (像素取证异常、模型意见分歧)</td></tr>
+<tr><td style="padding:2px 8px;"><span class="tag tag-attr">属性</span></td><td style="padding:2px 8px;">资产上下文信息，不参与评分</td></tr>
+</table>
+<h4 style="margin:0.6rem 0 0.4rem;font-size:0.85rem;color:#495057;">常见属性标签</h4>
+<table style="font-size:0.8rem;border-collapse:collapse;box-shadow:none;">
+<tr><td style="padding:2px 8px;font-family:monospace;">Texture role: albedo</td><td style="padding:2px 8px;">漫反射/基础色贴图，材质中最重要的通道</td></tr>
+<tr><td style="padding:2px 8px;font-family:monospace;">Texture role: normal</td><td style="padding:2px 8px;">法线贴图，用专属分析替代通用模型</td></tr>
+<tr><td style="padding:2px 8px;font-family:monospace;">Texture role: packed</td><td style="padding:2px 8px;">通道打包图 (MADS/ORM/RMA 等)</td></tr>
+<tr><td style="padding:2px 8px;font-family:monospace;">Tiling pattern detected</td><td style="padding:2px 8px;">检测到平铺重复纹理，游戏贴图常见特征，仅作参考</td></tr>
+<tr><td style="padding:2px 8px;font-family:monospace;">Auxiliary texture: AI scoring deferred</td><td style="padding:2px 8px;">辅助贴图不直接用模型评分，延迟到材质组复核</td></tr>
+<tr><td style="padding:2px 8px;font-family:monospace;">Albedo in same material group flagged</td><td style="padding:2px 8px;">同材质组的 albedo 已标记风险，该辅助贴图需复核</td></tr>
+</table>
+</div>
+</div>
+</details>
+
 <div class="filters">
   <div class="filter-group">
     <label>结论:</label>
