@@ -8,6 +8,7 @@ from .clip_detector import ClipDetector
 from .npr_detect import NprDetector
 from .universal_fake import UniversalFakeDetector
 from .sdxl_detector import SdxlDetector
+from .dire_detector import DireDetector
 
 
 MODEL_REGISTRY: dict[str, type[BaseDetector]] = {
@@ -17,6 +18,7 @@ MODEL_REGISTRY: dict[str, type[BaseDetector]] = {
     "clip_detector": ClipDetector,
     "npr": NprDetector,
     "universal_fake_detect": UniversalFakeDetector,
+    "dire": DireDetector,
     "sdxl_detector": SdxlDetector,
 }
 
@@ -50,6 +52,7 @@ __all__ = [
     "ClipDetector",
     "NprDetector",
     "UniversalFakeDetector",
+    "DireDetector",
     "SdxlDetector",
     "MODEL_REGISTRY",
     "MODEL_DESCRIPTIONS",

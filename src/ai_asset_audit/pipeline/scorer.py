@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 
 THRESHOLDS = {
@@ -22,6 +23,20 @@ def label_from_score(score: float, thresholds: dict[str, float] | None = None) -
     if score >= t.get("likely_human", 0.25):
         return "Likely Human"
     return "Low AI evidence"
+
+
+def texture_model_weight_factor(relative_path: str) -> float:
+    """Reduce natural-image model influence for packed or derived texture maps."""
+    stem = Path(relative_path).stem.lower()
+    suffix = stem.rsplit("_", 1)[-1] if "_" in stem else ""
+
+    if suffix in {"d", "diff", "diffuse", "albedo", "basecolor", "base_color"}:
+        return 1.0
+    if suffix in {"n", "normal", "mads", "orm", "rma", "mask"}:
+        return 0.65
+    if suffix in {"e", "emissive", "h", "height", "ao", "roughness", "metallic"}:
+        return 0.75
+    return 0.9
 
 
 @dataclass

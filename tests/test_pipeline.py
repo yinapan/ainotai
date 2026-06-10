@@ -5,7 +5,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from src.ai_asset_audit.pipeline.pipeline import run_pipeline
+from src.ai_asset_audit.pipeline.pipeline import _build_ensemble, run_pipeline
 
 
 def _create_test_png(path: Path, size=64, color=(255, 255, 255), extra_bytes: bytes = b""):
@@ -19,6 +19,42 @@ def _create_test_png(path: Path, size=64, color=(255, 255, 255), extra_bytes: by
 
 
 class PipelineTests(unittest.TestCase):
+    def test_build_ensemble_registers_extended_detectors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ("universal-fake-detect", "cnn-detection", "dire"):
+                (root / name).mkdir()
+
+            config = {
+                "models": {
+                    "enabled": True,
+                    "device": "cpu",
+                    "universal_fake_detect": {
+                        "enabled": True,
+                        "path": str(root / "universal-fake-detect"),
+                        "weight": 0.25,
+                    },
+                    "cnn_detection": {
+                        "enabled": True,
+                        "path": str(root / "cnn-detection"),
+                        "weight": 0.20,
+                    },
+                    "dire": {
+                        "enabled": True,
+                        "path": str(root / "dire"),
+                        "weight": 0.20,
+                    },
+                }
+            }
+
+            ensemble = _build_ensemble(config)
+
+            self.assertIsNotNone(ensemble)
+            self.assertEqual(
+                [detector.name for detector in ensemble.detectors],
+                ["cnn_detection", "universal_fake_detect", "dire"],
+            )
+
     def test_run_pipeline_detects_ai_metadata_signal(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -4,6 +4,7 @@ from src.ai_asset_audit.pipeline.scorer import (
     ScoreComponents,
     compute_final_score,
     label_from_score,
+    texture_model_weight_factor,
 )
 
 
@@ -28,6 +29,12 @@ class ScorerTests(unittest.TestCase):
         score = compute_final_score(components)
         self.assertGreater(score, 0.5)
         self.assertLessEqual(score, 1.0)
+
+    def test_texture_model_weight_factor_reduces_non_albedo_maps(self):
+        self.assertEqual(texture_model_weight_factor("Road_01_D.png"), 1.0)
+        self.assertLess(texture_model_weight_factor("Road_01_N.png"), 1.0)
+        self.assertLess(texture_model_weight_factor("Road_01_MADS.png"), 1.0)
+        self.assertLess(texture_model_weight_factor("Road_01_E.png"), 1.0)
 
 
 if __name__ == "__main__":

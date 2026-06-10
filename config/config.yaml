@@ -59,7 +59,7 @@ models:
     path: "./models/community-forensics"
 
   cnn_detection:
-    enabled: false
+    enabled: true
     weight: 0.20
     path: "./models/cnn-detection"
 
@@ -79,14 +79,22 @@ models:
     path: "./models/npr"
 
   universal_fake_detect:
-    enabled: false
-    weight: 0.15
+    enabled: true
+    weight: 0.25
     path: "./models/universal-fake-detect"
+
+  dire:
+    enabled: false
+    weight: 0.20
+    path: "./models/dire"
 
   sdxl_detector:
     enabled: true
     weight: 0.20
     path: "./models/sdxl-detector"
+
+  texture_weighting:
+    enabled: true
 
 report:
   formats: ["json", "csv", "markdown", "html"]

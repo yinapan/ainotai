@@ -23,7 +23,12 @@ from ..forensics.jpeg_forensics import analyze_jpeg_quantization
 from ..models.base import BaseDetector
 from ..models.ensemble import EnsembleDetector, EnsembleResult
 from ..models import MODEL_REGISTRY
-from .scorer import ScoreComponents, compute_final_score, label_from_score
+from .scorer import (
+    ScoreComponents,
+    compute_final_score,
+    label_from_score,
+    texture_model_weight_factor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +205,15 @@ def _run_model_inference(image: np.ndarray, ensemble: EnsembleDetector) -> tuple
     return ensemble_result.weighted_score, model_info
 
 
+def _adjust_model_score_for_asset(score: float, relative_path: str, config: dict) -> tuple[float, float]:
+    texture_cfg = config.get("models", {}).get("texture_weighting", {})
+    if not texture_cfg.get("enabled", True):
+        return score, 1.0
+
+    factor = texture_model_weight_factor(relative_path)
+    return round(score * factor, 4), factor
+
+
 def _process_image_asset(
     asset: AssetFile,
     signatures: dict,
@@ -235,6 +249,13 @@ def _process_image_asset(
     model_info: dict = {}
     if ensemble:
         model_score, model_info = _run_model_inference(image, ensemble)
+        model_score, model_factor = _adjust_model_score_for_asset(
+            model_score,
+            asset.relative_path,
+            config,
+        )
+        model_info["_weighted_score"] = model_score
+        model_info["_texture_weight_factor"] = model_factor
         if model_score > 0.7:
             evidence.append("Model ensemble high confidence")
 
