@@ -68,35 +68,39 @@ def apply_material_group_review(results: list[AssetResult]) -> None:
 
     for group_results in groups.values():
         if len(group_results) < 2:
+            _annotate_group_consensus(group_results, 0)
             continue
 
-        risky = [result for result in group_results if result.final_label in _RISK_LABELS]
-        if len(risky) != 1:
-            _annotate_group_consensus(group_results, len(risky))
-            continue
-
-        suspect = risky[0]
-        role = roles.get(suspect.relative_path)
-        if not role or role.role not in _AUXILIARY_ROLES:
-            _annotate_group_consensus(group_results, len(risky))
-            continue
-
-        albedo = [
-            result for result in group_results
-            if roles.get(result.relative_path, TextureRole("", "", "")).role == "albedo"
+        albedos = [
+            r for r in group_results
+            if roles.get(r.relative_path, TextureRole("", "", "")).role == "albedo"
         ]
-        albedo_is_risky = any(result.final_label in _RISK_LABELS for result in albedo)
-        if albedo_is_risky:
-            _annotate_group_consensus(group_results, len(risky))
-            continue
+        auxiliaries = [
+            r for r in group_results
+            if roles.get(r.relative_path, TextureRole("", "", "")).role in _AUXILIARY_ROLES
+        ]
 
-        suspect.final_label = "Likely Human"
-        suspect.review_required = True
-        suspect.confidence = min(suspect.confidence, 0.44)
-        suspect.evidence.append(
-            "Isolated auxiliary texture suspicion downgraded by material group review"
-        )
-        _annotate_group_consensus(group_results, len(risky))
+        albedo_risky = [r for r in albedos if r.final_label in _RISK_LABELS]
+        aux_risky = [r for r in auxiliaries if r.final_label in _RISK_LABELS]
+
+        if albedo_risky:
+            for aux in auxiliaries:
+                if aux.final_label not in _RISK_LABELS:
+                    aux.review_required = True
+                    aux.evidence.append(
+                        "Albedo in same material group flagged — review recommended"
+                    )
+        elif aux_risky and not albedo_risky:
+            for suspect in aux_risky:
+                suspect.final_label = "Likely Human"
+                suspect.review_required = True
+                suspect.confidence = min(suspect.confidence, 0.44)
+                suspect.evidence.append(
+                    "Isolated auxiliary texture suspicion downgraded by material group review"
+                )
+
+        risky_count = len(albedo_risky) + len(aux_risky)
+        _annotate_group_consensus(group_results, risky_count)
 
 
 def _annotate_group_consensus(results: list[AssetResult], risky_count: int) -> None:

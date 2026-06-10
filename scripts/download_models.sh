@@ -47,7 +47,7 @@ print('DONE')
 fi
 
 # ──── 4. CLIP ViT-B/32 (HuggingFace, ~600MB) ────
-echo "[4/4] CLIP ViT-B/32 (openai/clip-vit-base-patch32)"
+echo "[4/6] CLIP ViT-B/32 (openai/clip-vit-base-patch32)"
 if [ -f "$MODEL_DIR/clip-detector/config.json" ]; then
     echo "  SKIP: 已存在"
 else
@@ -57,6 +57,36 @@ from huggingface_hub import snapshot_download
 snapshot_download('openai/clip-vit-base-patch32', local_dir='$MODEL_DIR/clip-detector')
 print('DONE')
 " 2>&1 | tail -3
+fi
+
+# ──── 5. CNNDetection (GitHub, ~100MB) ────
+echo "[5/6] CNNDetection (PeterWang512/CNNDetection)"
+if ls "$MODEL_DIR/cnn-detection"/*.pth 1>/dev/null 2>&1; then
+    echo "  SKIP: 已存在"
+else
+    echo "  下载中..."
+    mkdir -p "$MODEL_DIR/cnn-detection"
+    python3 -c "
+import urllib.request, os
+url = 'https://www.dropbox.com/s/h0tc880f2jl83dk/blur_jpg_prob0.5.pth?dl=1'
+dst = '$MODEL_DIR/cnn-detection/blur_jpg_prob0.5.pth'
+if not os.path.exists(dst):
+    print('  Downloading CNNDetection weights...')
+    urllib.request.urlretrieve(url, dst)
+    print('  DONE:', os.path.getsize(dst), 'bytes')
+else:
+    print('  Already exists')
+" 2>&1 | tail -3
+fi
+
+# ──── 6. UniversalFakeDetect (~350MB) ────
+echo "[6/6] UniversalFakeDetect (Corvi et al.)"
+if ls "$MODEL_DIR/universal-fake-detect"/*.pth 1>/dev/null 2>&1; then
+    echo "  SKIP: 已存在"
+else
+    echo "  TODO: 请手动下载 UniversalFakeDetect 权重"
+    echo "    来源: https://github.com/Yuheng-Li/UniversalFakeDetect"
+    echo "    将 .pth 文件放入 $MODEL_DIR/universal-fake-detect/"
 fi
 
 # ──── Pip wheels ────

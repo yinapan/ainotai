@@ -3,6 +3,7 @@ from .frequency import compute_frequency_analysis
 from .noise import compute_noise_consistency
 from .color_stats import compute_color_stats
 from .jpeg_forensics import analyze_jpeg_quantization
+from .tiling import compute_tiling_analysis
 
 __all__ = [
     "compute_ela",
@@ -10,4 +11,5 @@ __all__ = [
     "compute_noise_consistency",
     "compute_color_stats",
     "analyze_jpeg_quantization",
+    "compute_tiling_analysis",
 ]

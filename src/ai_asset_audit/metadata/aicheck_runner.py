@@ -43,8 +43,8 @@ def run_aicheck(
         )
     except subprocess.TimeoutExpired:
         return AicheckResult(error="aicheck timeout")
-    except FileNotFoundError:
-        return AicheckResult(error="aicheck binary not found")
+    except (FileNotFoundError, OSError):
+        return AicheckResult(error="aicheck binary not executable")
 
     output = result.stdout.strip()
     signals: list[str] = []

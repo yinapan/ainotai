@@ -20,16 +20,20 @@ from ..forensics.frequency import compute_frequency_analysis
 from ..forensics.noise import compute_noise_consistency
 from ..forensics.color_stats import compute_color_stats
 from ..forensics.jpeg_forensics import analyze_jpeg_quantization
+from ..forensics.tiling import compute_tiling_analysis
 from ..models.base import BaseDetector
 from ..models.ensemble import EnsembleDetector, EnsembleResult
 from ..models import MODEL_REGISTRY
 from .scorer import (
     ScoreComponents,
+    ModelConsensus,
     compute_final_score,
+    compute_model_consensus,
     label_from_score,
     texture_model_weight_factor,
+    texture_model_weight_overrides,
 )
-from .texture_grouping import apply_material_group_review
+from .texture_grouping import apply_material_group_review, parse_texture_role
 
 logger = logging.getLogger(__name__)
 
@@ -183,6 +187,13 @@ def _run_forensics(image: np.ndarray, config: dict) -> tuple[float, dict]:
         if not color_result.error:
             scores.append(color_result.smoothness)
 
+    if forensics_config.get("tiling", {}).get("enabled", True):
+        tiling_thresh = forensics_config.get("tiling", {}).get("threshold", 0.3)
+        tiling_result = compute_tiling_analysis(image, threshold=tiling_thresh)
+        results["tiling_score"] = tiling_result.tiling_score
+        results["tiling_period"] = f"{tiling_result.period_x}x{tiling_result.period_y}"
+        results["tiling_suspicious"] = tiling_result.suspicious
+
     combined = sum(scores) / len(scores) if scores else 0.0
     results["combined_score"] = round(combined, 4)
     return combined, results
@@ -197,13 +208,61 @@ def _ndarray_to_pil(image: np.ndarray):
     return Image.fromarray(rgb)
 
 
-def _run_model_inference(image: np.ndarray, ensemble: EnsembleDetector) -> tuple[float, dict]:
-    pil_image = _ndarray_to_pil(image)
-    ensemble_result = ensemble.predict(pil_image)
-    model_info: dict = {}
-    for name, det_result in ensemble_result.model_results.items():
-        model_info[name] = det_result.score if det_result.available else None
-    return ensemble_result.weighted_score, model_info
+def _extract_crops(image: np.ndarray, crop_size: int = 512, max_crops: int = 5) -> list[np.ndarray]:
+    """Extract center + corner crops from large images for multi-crop TTA."""
+    h, w = image.shape[:2]
+    if h <= crop_size or w <= crop_size:
+        return [image]
+
+    crops = []
+    cy, cx = h // 2, w // 2
+    half = crop_size // 2
+
+    # Center crop
+    crops.append(image[cy - half:cy + half, cx - half:cx + half])
+    # Top-left
+    crops.append(image[:crop_size, :crop_size])
+    # Top-right
+    crops.append(image[:crop_size, w - crop_size:])
+    # Bottom-left
+    crops.append(image[h - crop_size:, :crop_size])
+    # Bottom-right
+    crops.append(image[h - crop_size:, w - crop_size:])
+
+    return crops[:max_crops]
+
+
+def _run_model_inference(image: np.ndarray, ensemble: EnsembleDetector, weight_overrides: dict[str, float] | None = None) -> tuple[float, dict]:
+    h, w = image.shape[:2]
+    use_multicrop = h >= 1024 and w >= 1024
+
+    if not use_multicrop:
+        pil_image = _ndarray_to_pil(image)
+        ensemble_result = ensemble.predict(pil_image, weight_overrides=weight_overrides)
+        model_info: dict = {}
+        for name, det_result in ensemble_result.model_results.items():
+            model_info[name] = det_result.score if det_result.available else None
+        return ensemble_result.weighted_score, model_info
+
+    crops = _extract_crops(image)
+    all_scores: list[float] = []
+    all_model_scores: dict[str, list[float]] = {}
+
+    for crop in crops:
+        pil_crop = _ndarray_to_pil(crop)
+        result = ensemble.predict(pil_crop, weight_overrides=weight_overrides)
+        all_scores.append(result.weighted_score)
+        for name, det_result in result.model_results.items():
+            if det_result.available and det_result.error is None:
+                all_model_scores.setdefault(name, []).append(det_result.score)
+
+    model_info = {}
+    for name, scores in all_model_scores.items():
+        model_info[name] = max(scores)
+
+    # Use max of crop scores as final (conservative — catches AI patches)
+    weighted_score = max(all_scores) if all_scores else 0.0
+    return weighted_score, model_info
 
 
 def _adjust_model_score_for_asset(score: float, relative_path: str, config: dict) -> tuple[float, float]:
@@ -226,8 +285,17 @@ def _process_image_asset(
     thresholds: dict,
 ) -> AssetResult:
     evidence: list[str] = list(meta_signals)
+    texture_role = parse_texture_role(asset.relative_path)
+    is_auxiliary = texture_role.role in ("normal", "packed", "emissive", "height")
 
     image = cv2.imread(str(asset.path))
+    if image is None:
+        try:
+            from PIL import Image
+            pil_img = Image.open(asset.path).convert("RGB")
+            image = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+        except Exception:
+            pass
     if image is None:
         return AssetResult(
             file_id=f"sha256:{asset.sha256}",
@@ -248,23 +316,45 @@ def _process_image_asset(
 
     model_score = 0.0
     model_info: dict = {}
+    consensus = None
     if ensemble:
-        model_score, model_info = _run_model_inference(image, ensemble)
-        model_score, model_factor = _adjust_model_score_for_asset(
-            model_score,
+        weight_ov = texture_model_weight_overrides(asset.relative_path)
+        raw_model_score, model_info = _run_model_inference(image, ensemble, weight_overrides=weight_ov)
+        raw_model_score, model_factor = _adjust_model_score_for_asset(
+            raw_model_score,
             asset.relative_path,
             config,
         )
-        model_info["_weighted_score"] = model_score
+        model_info["_weighted_score"] = raw_model_score
         model_info["_texture_weight_factor"] = model_factor
-        if model_score > 0.7:
-            evidence.append("Model ensemble high confidence")
 
+        consensus = compute_model_consensus(model_info)
+        model_info["_consensus"] = consensus.agreement
+        model_info["_high_count"] = consensus.high_score_count
+        model_info["_available_count"] = consensus.available_count
+        model_info["_divergence"] = consensus.divergence
+
+        if is_auxiliary:
+            model_score = 0.0
+            evidence.append("Auxiliary texture: AI scoring deferred to group review")
+        else:
+            model_score = raw_model_score
+            if consensus.agreement in ("unanimous_high", "majority_high"):
+                evidence.append("Model ensemble high confidence")
+            elif consensus.agreement == "split" and model_score > 0.5:
+                evidence.append("Model scores split (needs review)")
+
+    if forensics_info.get("tiling_suspicious", False) and model_score > 0.5 and forensics_score > 0.5:
+        if texture_role.role in ("albedo", "unknown"):
+            evidence.append("Tiling pattern detected (auxiliary)")
+
+    consensus_obj = consensus if ensemble and model_score > 0 else None
     components = ScoreComponents(
         metadata_score=meta_score,
         forensics_score=forensics_score,
         model_score=model_score,
         metadata_confirmed=meta_score >= 1.0,
+        consensus=consensus_obj,
     )
     final_score = compute_final_score(components)
     label = label_from_score(final_score, thresholds or None)

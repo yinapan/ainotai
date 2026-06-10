@@ -23,7 +23,7 @@ scan:
     - "tools"
 
 metadata:
-  enabled: false
+  enabled: true
   exiftool_path: "./tools/exiftool/exiftool"
   c2patool_path: "./tools/c2patool/c2patool"
   aicheck_path: "./tools/aicheck/aicheck"
@@ -41,6 +41,9 @@ forensics:
     enabled: true
   color_stats:
     enabled: true
+  tiling:
+    enabled: true
+    threshold: 0.3
 
 fbx:
   enabled: true

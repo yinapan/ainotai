@@ -25,7 +25,7 @@ class EnsembleDetector:
     def add(self, detector: BaseDetector) -> None:
         self.detectors.append(detector)
 
-    def predict(self, image: Image.Image) -> EnsembleResult:
+    def predict(self, image: Image.Image, weight_overrides: dict[str, float] | None = None) -> EnsembleResult:
         results: dict[str, DetectionResult] = {}
         weighted_sum = 0.0
         total_weight = 0.0
@@ -35,8 +35,9 @@ class EnsembleDetector:
             result = detector.detect(image)
             results[detector.name] = result
             if result.available and result.error is None:
-                weighted_sum += result.score * detector.weight
-                total_weight += detector.weight
+                w = weight_overrides.get(detector.name, detector.weight) if weight_overrides else detector.weight
+                weighted_sum += result.score * w
+                total_weight += w
                 active += 1
 
         weighted_score = weighted_sum / total_weight if total_weight > 0 else 0.0

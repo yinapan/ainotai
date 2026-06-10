@@ -43,8 +43,8 @@ def extract_exif(
         )
     except subprocess.TimeoutExpired:
         return ExifResult(error="exiftool timeout")
-    except FileNotFoundError:
-        return ExifResult(error="exiftool binary not found")
+    except (FileNotFoundError, OSError):
+        return ExifResult(error="exiftool binary not executable")
 
     if result.returncode != 0:
         return ExifResult(error=f"exiftool exit code {result.returncode}")

@@ -52,8 +52,8 @@ def check_c2pa(
         )
     except subprocess.TimeoutExpired:
         return C2paResult(error="c2patool timeout")
-    except FileNotFoundError:
-        return C2paResult(error="c2patool binary not found")
+    except (FileNotFoundError, OSError):
+        return C2paResult(error="c2patool binary not executable")
 
     if result.returncode != 0:
         if "no manifest" in result.stderr.lower() or "not found" in result.stderr.lower():
