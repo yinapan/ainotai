@@ -94,7 +94,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
     if "markdown" in formats:
         write_markdown_report(results, output_dir)
     if "html" in formats:
-        write_html_report(results, output_dir)
+        write_html_report(results, output_dir, args.input)
 
     print(f"扫描完成: {len(results)} 个文件。报告已写入 {Path(output_dir).resolve()}")
 

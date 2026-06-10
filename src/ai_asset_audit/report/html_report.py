@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import base64
+import io
 from datetime import datetime
 from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import cv2
 
 if TYPE_CHECKING:
     from ..pipeline.pipeline import AssetResult
@@ -19,7 +23,28 @@ _LABEL_COLORS = {
 }
 
 
-def write_html_report(results: list[AssetResult], output_dir: str | Path) -> Path:
+_THUMB_SIZE = 96
+
+
+def _generate_thumbnail(image_path: Path) -> str:
+    """Generate a base64 data URI thumbnail. Returns empty string on failure."""
+    try:
+        img = cv2.imread(str(image_path))
+        if img is None:
+            return ""
+        h, w = img.shape[:2]
+        scale = _THUMB_SIZE / max(h, w)
+        if scale < 1.0:
+            new_w, new_h = int(w * scale), int(h * scale)
+            img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        _, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+        return f"data:image/jpeg;base64,{b64}"
+    except Exception:
+        return ""
+
+
+def write_html_report(results: list[AssetResult], output_dir: str | Path, input_dir: str | Path = "") -> Path:
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     path = out / "report.html"
@@ -31,10 +56,18 @@ def write_html_report(results: list[AssetResult], output_dir: str | Path) -> Pat
     for result in results:
         label_counts[result.final_label] = label_counts.get(result.final_label, 0) + 1
 
+    src_dir = Path(input_dir) if input_dir else Path(".")
+    thumbnails: dict[str, str] = {}
+    for result in results:
+        if result.asset_type == "image":
+            img_path = src_dir / result.relative_path
+            if img_path.is_file():
+                thumbnails[result.relative_path] = _generate_thumbnail(img_path)
+
     rows_parts = []
     for i, result in enumerate(results):
         result._row_idx = i
-        rows_parts.append(_result_row(result))
+        rows_parts.append(_result_row(result, thumbnails.get(result.relative_path, "")))
     rows = "".join(rows_parts)
     summary_items = "".join(
         f'<li><span style="color:{_LABEL_COLORS.get(label, "#000")}">'
@@ -79,6 +112,13 @@ li {{ margin: 0.3rem 0; }}
 .tag-weak {{ background: #fff3cd; color: #856404; }}
 .tag-attr {{ background: #e2e3e5; color: #495057; }}
 .ev-tier {{ margin-bottom: 3px; }}
+.thumb-cell {{ width: 96px; padding: 4px; text-align: center; }}
+.thumb {{ max-width: 80px; max-height: 80px; border-radius: 4px; cursor: pointer; border: 1px solid #dee2e6; transition: transform 0.2s; }}
+.thumb:hover {{ transform: scale(1.1); border-color: #6c757d; }}
+.lightbox {{ display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); justify-content: center; align-items: center; }}
+.lightbox.show {{ display: flex; }}
+.lightbox img {{ max-width: 90vw; max-height: 90vh; border-radius: 4px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }}
+.lightbox-close {{ position: absolute; top: 20px; right: 40px; color: #fff; font-size: 2rem; cursor: pointer; text-decoration: none; }}
 </style>
 </head>
 <body>
@@ -158,24 +198,35 @@ li {{ margin: 0.3rem 0; }}
 
 <table id="report-table">
 <thead><tr>
-<th data-col="0">文件路径 <span class="sort-arrow">&#9650;&#9660;</span></th>
-<th data-col="1">类型 <span class="sort-arrow">&#9650;&#9660;</span></th>
-<th data-col="2">结论 <span class="sort-arrow">&#9650;&#9660;</span></th>
-<th data-col="3" data-type="number">置信度 <span class="sort-arrow">&#9650;&#9660;</span></th>
-<th data-col="4">尺寸 <span class="sort-arrow">&#9650;&#9660;</span></th>
-<th data-col="5" data-type="number">Tiling <span class="sort-arrow">&#9650;&#9660;</span></th>
-<th data-col="6">模型分数 <span class="sort-arrow">&#9650;&#9660;</span></th>
-<th data-col="7">证据 <span class="sort-arrow">&#9650;&#9660;</span></th>
+<th data-col="0">缩略图</th>
+<th data-col="1">文件路径 <span class="sort-arrow">&#9650;&#9660;</span></th>
+<th data-col="2">类型 <span class="sort-arrow">&#9650;&#9660;</span></th>
+<th data-col="3">结论 <span class="sort-arrow">&#9650;&#9660;</span></th>
+<th data-col="4" data-type="number">置信度 <span class="sort-arrow">&#9650;&#9660;</span></th>
+<th data-col="5">尺寸 <span class="sort-arrow">&#9650;&#9660;</span></th>
+<th data-col="6" data-type="number">Tiling <span class="sort-arrow">&#9650;&#9660;</span></th>
+<th data-col="7">模型分数 <span class="sort-arrow">&#9650;&#9660;</span></th>
+<th data-col="8">证据 <span class="sort-arrow">&#9650;&#9660;</span></th>
 </tr></thead>
 <tbody>
 {rows}
 </tbody>
 </table>
 
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('show')">
+<span class="lightbox-close">&times;</span>
+<img id="lightbox-img" src="">
+</div>
 <footer style="margin-top:2rem;color:#6c757d;font-size:0.8rem;">
 <p>本报告由离线检测流水线自动生成，仅限内网查看。</p>
 </footer>
 
+<script>
+function showLightbox(src) {{
+  document.getElementById('lightbox-img').src = src;
+  document.getElementById('lightbox').classList.add('show');
+}}
+</script>
 <script>
 (function() {{
   const table = document.getElementById('report-table');
@@ -246,10 +297,10 @@ li {{ margin: 0.3rem 0; }}
     let visible = 0;
 
     rows.forEach(row => {{
-      const label = getCellValue(row, 2);
-      const evidence = getCellValue(row, 7);
-      const filename = getCellValue(row, 0).toLowerCase();
-      const conf = parseFloat(getCellValue(row, 3)) || 0;
+      const label = getCellValue(row, 3);
+      const evidence = getCellValue(row, 8);
+      const filename = getCellValue(row, 1).toLowerCase();
+      const conf = parseFloat(getCellValue(row, 4)) || 0;
 
       let show = true;
       if (labelVal && label !== labelVal) show = false;
@@ -277,14 +328,27 @@ li {{ margin: 0.3rem 0; }}
     return path
 
 
-def _result_row(result: AssetResult) -> str:
+def _result_row(result: AssetResult, thumbnail: str = "") -> str:
     color = _LABEL_COLORS.get(result.final_label, "#000")
     tiered_html = _format_tiered_evidence(result)
     evidence_raw = "; ".join(result.evidence)
+    filter_tags_raw = "; ".join(result.evidence + result.asset_attributes + result.strong_evidence)
     model_html = _format_models(result.models)
     tiling_score = result.forensics.get("tiling_score", 0) if result.forensics else 0
     idx = getattr(result, '_row_idx', 0)
+
+    thumb_cell = '<td class="thumb-cell"></td>'
+    if thumbnail:
+        thumb_cell = (
+            f'<td class="thumb-cell">'
+            f'<img src="{thumbnail}" class="thumb" '
+            f'onclick="showLightbox(this.src)" '
+            f'title="点击查看大图" loading="lazy">'
+            f'</td>'
+        )
+
     return f"""<tr data-idx="{idx}">
+{thumb_cell}
 <td>{escape(result.relative_path)}</td>
 <td>{escape(result.asset_type)}</td>
 <td style="color:{color};font-weight:bold" data-value="{escape(result.final_label)}">{escape(result.final_label)}</td>
@@ -292,7 +356,7 @@ def _result_row(result: AssetResult) -> str:
 <td>{result.dimensions or '-'}</td>
 <td data-value="{tiling_score:.4f}">{tiling_score:.4f}</td>
 <td class="models">{model_html}</td>
-<td class="evidence" data-value="{escape(evidence_raw)}">{tiered_html}</td>
+<td class="evidence" data-value="{escape(filter_tags_raw)}">{tiered_html}</td>
 </tr>"""
 
 
