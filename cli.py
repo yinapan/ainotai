@@ -148,6 +148,8 @@ def cmd_model_status(args: argparse.Namespace) -> int:
 def cmd_calibrate(args: argparse.Namespace) -> int:
     from src.ai_asset_audit.pipeline.calibration import run_calibration
     config = _load_config(args.config)
+    if args.workers is not None:
+        config.setdefault("calibration", {})["parallel_workers"] = args.workers
     result = run_calibration(args.benchmark, config)
     report = {
         "total_samples": result.total_samples,
@@ -208,6 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
     calibrate.add_argument("benchmark", help="标注集目录 (子目录: human/ai_generated/ai_assisted/false_positive)")
     calibrate.add_argument("--config", default="./config/config.yaml")
     calibrate.add_argument("--output", default="./calibration_report.json")
+    calibrate.add_argument("--workers", type=int, help="并行处理的类别目录数")
     calibrate.set_defaults(func=cmd_calibrate)
 
     return parser

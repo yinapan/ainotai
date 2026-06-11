@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -28,6 +29,28 @@ class CalibrationResult:
     confusion: dict = field(default_factory=dict)
 
 
+def _category_stats(category_dir: Path, category: str, gt: float, config: dict) -> tuple[str, dict | None, list[tuple[float, float]]]:
+    results = run_pipeline(str(category_dir), config)
+    scores = [r.confidence for r in results]
+
+    if not scores:
+        return category, None, []
+
+    arr = np.array(scores)
+    stats = {
+        "count": len(scores),
+        "ground_truth": gt,
+        "min": round(float(arr.min()), 4),
+        "max": round(float(arr.max()), 4),
+        "median": round(float(np.median(arr)), 4),
+        "p25": round(float(np.percentile(arr, 25)), 4),
+        "p75": round(float(np.percentile(arr, 75)), 4),
+        "mean": round(float(arr.mean()), 4),
+    }
+
+    return category, stats, [(s, gt) for s in scores]
+
+
 def run_calibration(benchmark_dir: str | Path, config: dict) -> CalibrationResult:
     benchmark = Path(benchmark_dir)
     if not benchmark.is_dir():
@@ -35,6 +58,7 @@ def run_calibration(benchmark_dir: str | Path, config: dict) -> CalibrationResul
 
     all_scores: list[tuple[float, float]] = []
     per_category: dict[str, dict] = {}
+    jobs: list[tuple[Path, str, float]] = []
 
     for category_dir in sorted(benchmark.iterdir()):
         if not category_dir.is_dir():
@@ -45,26 +69,26 @@ def run_calibration(benchmark_dir: str | Path, config: dict) -> CalibrationResul
             continue
 
         gt = GROUND_TRUTH_LABELS[category]
-        results = run_pipeline(str(category_dir), config)
-        scores = [r.confidence for r in results]
+        jobs.append((category_dir, category, gt))
 
-        if not scores:
-            continue
+    workers = int(config.get("calibration", {}).get("parallel_workers", 1) or 1)
+    if workers > 1 and len(jobs) > 1:
+        with ThreadPoolExecutor(max_workers=min(workers, len(jobs))) as executor:
+            futures = [
+                executor.submit(_category_stats, category_dir, category, gt, config)
+                for category_dir, category, gt in jobs
+            ]
+            category_results = [future.result() for future in as_completed(futures)]
+    else:
+        category_results = [
+            _category_stats(category_dir, category, gt, config)
+            for category_dir, category, gt in jobs
+        ]
 
-        arr = np.array(scores)
-        per_category[category] = {
-            "count": len(scores),
-            "ground_truth": gt,
-            "min": round(float(arr.min()), 4),
-            "max": round(float(arr.max()), 4),
-            "median": round(float(np.median(arr)), 4),
-            "p25": round(float(np.percentile(arr, 25)), 4),
-            "p75": round(float(np.percentile(arr, 75)), 4),
-            "mean": round(float(arr.mean()), 4),
-        }
-
-        for s in scores:
-            all_scores.append((s, gt))
+    for category, stats, scores in sorted(category_results, key=lambda item: item[0]):
+        if stats:
+            per_category[category] = stats
+        all_scores.extend(scores)
 
     if not all_scores:
         return CalibrationResult(per_category=per_category)
