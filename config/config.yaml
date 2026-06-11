@@ -110,10 +110,10 @@ report:
   include_lowres_thumbnail: false
 
 thresholds:
-  confirmed_ai: 0.15
-  likely_ai: 0.13
-  suspicious: 0.09
-  likely_human: 0.05
+  confirmed_ai: 0.85
+  likely_ai: 0.65
+  suspicious: 0.45
+  likely_human: 0.25
 
 scoring:
   weights:
